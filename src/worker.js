@@ -43,6 +43,9 @@ async function parseBody(req) {
 }
 
 function requireAdmin(user) { return user && user.role === 'admin'; }
+const validEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||''));
+const allowedUploadTypes = new Set(['application/pdf','image/jpeg','image/png','image/webp']);
+
 
 async function api(req, env, url) {
   const p = url.pathname;
@@ -59,10 +62,32 @@ async function api(req, env, url) {
     const count = await env.DB.prepare(`SELECT COUNT(*) qty FROM users WHERE role='admin'`).first();
     if (Number(count?.qty || 0) > 0) return json({ error:'Administrador já configurado.' }, 409);
     const b = await req.json();
-    if (!b.name || !b.email || !b.password || b.password.length < 8) return json({ error:'Informe nome, e-mail e senha com pelo menos 8 caracteres.' }, 400);
+    if (!b.name || !validEmail(b.email) || !b.password || b.password.length < 10) return json({ error:'Informe nome, e-mail e senha com pelo menos 8 caracteres.' }, 400);
     const salt = newSalt(); const hash = await hashPassword(b.password, salt);
     await env.DB.prepare(`INSERT INTO users(name,email,password_hash,password_salt,role) VALUES(?,?,?,?, 'admin')`).bind(b.name,b.email.toLowerCase().trim(),hash,salt).run();
     return json({ ok:true });
+  }
+
+  // Recuperação controlada: requer chave separada e temporária configurada como Secret.
+  // Após usar, exclua ADMIN_RECOVERY_KEY no Dashboard; nenhuma senha é incluída no código.
+  if (p === '/api/admin/recover' && req.method === 'POST') {
+    const supplied = req.headers.get('x-recovery-key');
+    if (!env.ADMIN_RECOVERY_KEY || !supplied || supplied !== env.ADMIN_RECOVERY_KEY)
+      return json({error:'Recuperação não autorizada.'},403);
+    const b = await req.json();
+    const email = String(b.email || '').trim().toLowerCase();
+    if (!validEmail(email) || typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 128)
+      return json({error:'Informe e-mail válido e senha entre 10 e 128 caracteres.'},400);
+    const admin = await env.DB.prepare("SELECT id FROM users WHERE role='admin' AND active=1 ORDER BY id LIMIT 1").first();
+    if (!admin) return json({error:'Nenhum administrador ativo cadastrado.'},404);
+    const existing = await env.DB.prepare('SELECT id FROM users WHERE email=? AND id<>?').bind(email,admin.id).first();
+    if (existing) return json({error:'E-mail já pertence a outro usuário.'},409);
+    const salt = newSalt(); const hash = await hashPassword(b.password,salt);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET email=?, password_hash=?, password_salt=? WHERE id=? AND role='admin'").bind(email,hash,salt,admin.id),
+      env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(admin.id)
+    ]);
+    return json({ok:true, message:'Credenciais atualizadas. Remova ADMIN_RECOVERY_KEY dos Secrets.'});
   }
 
   if (p === '/api/auth/login' && req.method === 'POST') {
@@ -127,7 +152,7 @@ async function api(req, env, url) {
   if (p === '/api/clients' && req.method === 'POST') {
     if (!requireAdmin(user)) return json({error:'Acesso restrito.'},403);
     const b = await req.json();
-    if (!b.name || !b.email || !b.password) return json({error:'Nome, e-mail e senha são obrigatórios.'},400);
+    if (!b.name || !validEmail(b.email) || !b.password || String(b.password).length < 10) return json({error:'Informe nome, e-mail válido e senha de pelo menos 10 caracteres.'},400);
     const salt = newSalt(); const hash = await hashPassword(b.password,salt);
     try {
       const ur = await env.DB.prepare(`INSERT INTO users(name,email,password_hash,password_salt,role) VALUES(?,?,?,?, 'client')`).bind(b.name,b.email.toLowerCase().trim(),hash,salt).run();
@@ -202,6 +227,7 @@ async function api(req, env, url) {
   if (p === '/api/documents/upload' && req.method === 'POST') {
     const form=await req.formData(); const file=form.get('file'); let cid=Number(form.get('client_id'));
     if (!(file instanceof File)) return json({error:'Arquivo obrigatório.'},400);
+    if (file.size > 10*1024*1024 || !allowedUploadTypes.has(file.type)) return json({error:'Somente PDF ou imagens JPG/PNG/WebP de até 10 MB.'},400);
     if (user.role !== 'admin') { const c=await env.DB.prepare(`SELECT id FROM clients WHERE user_id=?`).bind(user.id).first(); cid=c?.id; }
     if (!cid) return json({error:'Cliente inválido.'},400);
     const key=`clients/${cid}/${Date.now()}-${randomId()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
@@ -226,11 +252,15 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     try {
+      if (url.pathname.startsWith('/api/') && !['GET','HEAD','OPTIONS'].includes(req.method)) {
+        const origin=req.headers.get('origin');
+        if (origin && origin !== url.origin) return json({error:'Origem não autorizada.'},403);
+      }
       if (url.pathname.startsWith('/api/')) return await api(req, env, url);
       return env.ASSETS.fetch(req);
     } catch (e) {
       console.error(e);
-      return json({ error:'Erro interno do servidor.', detail: e?.message || String(e) }, 500);
+      return json({ error:'Erro interno do servidor.' }, 500);
     }
   }
 };
