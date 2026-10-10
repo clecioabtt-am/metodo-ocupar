@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#15120f" />
+  <title>Método Ocupar | Desenvolvimento Profissional</title>
+  <meta name="description" content="Plataforma de desenvolvimento profissional, carreira e perfil comportamental." />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/assets/icon-192.png" />
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#home"><span class="brandmark">OA</span><span><strong>Ocleiah Araujo</strong><small>Método Ocupar</small></span></a>
+  <nav><a href="#metodo">Método</a><a href="#servicos">Soluções</a><a href="#contato">Contato</a><button id="loginBtn" class="btn secondary">Entrar</button></nav>
+</header>
+
+<main id="publicSite">
+  <section class="hero" id="home">
+    <div class="heroCopy">
+      <span class="eyebrow">DESENVOLVIMENTO PROFISSIONAL • CARREIRA • COMPORTAMENTO</span>
+      <h1>Ocupe o espaço que a sua trajetória profissional merece.</h1>
+      <p>Uma plataforma para transformar autoconhecimento em posicionamento, liderança e crescimento de carreira.</p>
+      <div class="heroActions"><a href="#contato" class="btn">Quero evoluir profissionalmente</a><a href="#metodo" class="btn ghost">Conhecer o Método Ocupar</a></div>
+      <div class="stats"><div><b>20+</b><span>anos de experiência</span></div><div><b>360°</b><span>visão comportamental</span></div><div><b>1:1</b><span>acompanhamento estratégico</span></div></div>
+    </div>
+    <div class="heroCard"><div class="portraitPlaceholder">OA</div><div><span class="tag">Especialista</span><h3>Ocleiah Araujo</h3><p>Desenvolvimento de pessoas • Crescimento de carreira • Análise de perfil comportamental.</p></div></div>
+  </section>
+
+  <section class="section" id="metodo"><div class="sectionHead"><span>O MÉTODO</span><h2>Diagnóstico, estratégia e evolução mensurável.</h2></div><div class="cards3"><article><b>01</b><h3>Perfil comportamental</h3><p>Mapeamento de padrões, forças, estilo de comunicação e pontos de desenvolvimento.</p></article><article><b>02</b><h3>Plano de desenvolvimento</h3><p>Objetivos claros, ações práticas, prazos e acompanhamento da evolução profissional.</p></article><article><b>03</b><h3>Posicionamento</h3><p>Estratégias para liderança, reconhecimento, tomada de decisão e crescimento de carreira.</p></article></div></section>
+
+  <section class="section soft" id="servicos"><div class="sectionHead"><span>PLATAFORMA</span><h2>Seu desenvolvimento continua entre uma sessão e outra.</h2></div><div class="featureGrid"><div>📊 <b>Gráficos de evolução</b><small>Acompanhe avaliações e progresso.</small></div><div>🎯 <b>Plano de carreira</b><small>Metas, prazos e ações organizadas.</small></div><div>📅 <b>Agenda</b><small>Próximas sessões em um só lugar.</small></div><div>📝 <b>Diário profissional</b><small>Registre situações e próximos passos.</small></div><div>📂 <b>Materiais</b><small>Documentos e conteúdos do acompanhamento.</small></div><div>🔒 <b>Área individual</b><small>Ambiente privado para cada cliente.</small></div></div></section>
+
+  <section class="section contact" id="contato"><div><span class="eyebrow">COMECE AGORA</span><h2>Quer entender qual é o próximo passo da sua carreira?</h2><p>Deixe seus dados para receber contato sobre avaliação, mentoria ou acompanhamento profissional.</p></div><form id="leadForm" class="form"><input name="name" placeholder="Seu nome" required><input name="email" type="email" placeholder="Seu e-mail"><input name="phone" placeholder="WhatsApp"><select name="interest"><option value="Mentoria de carreira">Mentoria de carreira</option><option value="Perfil comportamental">Perfil comportamental</option><option value="Desenvolvimento de liderança">Desenvolvimento de liderança</option><option value="Programa corporativo">Programa corporativo</option></select><button class="btn" type="submit">Quero conversar</button><small id="leadMsg"></small></form></section>
+</main>
+
+<div id="authModal" class="modal hidden"><div class="modalCard"><button class="x" data-close>×</button><h2>Acessar plataforma</h2><p class="muted">Entre com suas credenciais.</p><form id="loginForm" class="form"><input name="email" type="email" placeholder="E-mail" required><input name="password" type="password" placeholder="Senha" required><button class="btn" type="submit">Entrar</button><small id="loginMsg"></small></form></div></div>
+
+<section id="appShell" class="app hidden">
+  <aside class="sidebar"><div class="brand sidebrand"><span class="brandmark">OA</span><span><strong>Método Ocupar</strong><small>Desenvolvimento Profissional</small></span></div><div id="userBox" class="userbox"></div><nav id="appNav"></nav><button id="logoutBtn" class="navItem danger">Sair</button></aside>
+  <div class="workspace"><header class="appHeader"><button id="menuBtn" class="mobileMenu">☰</button><div><small>PLATAFORMA</small><h2 id="pageTitle">Visão geral</h2></div><div id="today"></div></header><div id="appContent" class="content"></div></div>
+</section>
+
+<script src="/app.js" type="module"></script>
+</body></html>

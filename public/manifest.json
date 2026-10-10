@@ -1,0 +1,12 @@
+{
+  "name":"Método Ocupar",
+  "short_name":"Ocupar",
+  "start_url":"/",
+  "display":"standalone",
+  "background_color":"#f7f3ef",
+  "theme_color":"#15120f",
+  "icons":[
+    {"src":"/assets/icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"/assets/icon-512.png","sizes":"512x512","type":"image/png"}
+  ]
+}
