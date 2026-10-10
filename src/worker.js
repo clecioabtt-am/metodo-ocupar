@@ -118,9 +118,72 @@ async function api(req, env, url) {
     return json({ok:true});
   }
 
+  if (p === '/api/branding' && req.method === 'GET') {
+    const r=await env.DB.prepare("SELECT key,value FROM app_settings").all();return json(Object.fromEntries(r.results.map(x=>[x.key,x.value])));
+  }
+  if (p === '/api/branding/photo' && req.method === 'GET') {
+    const obj=await env.FILES.get('branding/ocleiah-hero');if(!obj)return new Response('Foto não cadastrada',{status:404});
+    const headers=new Headers();obj.writeHttpMetadata(headers);headers.set('Cache-Control','public, max-age=300');return new Response(obj.body,{headers});
+  }
+  const questionnairePublic=p.match(/^\/api\/questionnaires\/([a-f0-9]{32})$/);
+  if(questionnairePublic && req.method==='GET'){
+    const q=await env.DB.prepare('SELECT q.id,q.title,q.questions_json,q.status,c.id client_id,c.goal FROM questionnaires q JOIN clients c ON c.id=q.client_id WHERE q.token=?').bind(questionnairePublic[1]).first();
+    if(!q||q.status!=='pendente')return json({error:'Questionário indisponível.'},404);
+    return json({title:q.title,questions:JSON.parse(q.questions_json),goal:q.goal});
+  }
+  if(questionnairePublic && req.method==='POST'){
+    const q=await env.DB.prepare('SELECT * FROM questionnaires WHERE token=?').bind(questionnairePublic[1]).first();
+    if(!q||q.status!=='pendente')return json({error:'Questionário indisponível ou respondido.'},404);
+    const b=await req.json();const qs=JSON.parse(q.questions_json);if(!b.answers||typeof b.answers!=='object'||qs.some(x=>typeof b.answers[x.id]!=='string'||!b.answers[x.id].trim()||b.answers[x.id].length>2500))return json({error:'Responda todas as perguntas (até 2500 caracteres cada).'},400);
+    await env.DB.prepare("UPDATE questionnaires SET answers_json=?,status='respondido',responded_at=CURRENT_TIMESTAMP WHERE id=? AND status='pendente'").bind(JSON.stringify(Object.fromEntries(qs.map(x=>[x.id,b.answers[x.id]]))),q.id).run();return json({ok:true});
+  }
   const user = await getUser(req, env);
   if (!user) return json({error:'Não autenticado.'},401);
 
+  if(p==='/api/branding'&&req.method==='PUT'){
+    if(!requireAdmin(user))return json({error:'Acesso restrito.'},403);
+    const b=await req.json();for(const key of ['primary','accent','hero_title','hero_subtitle']){
+      if(b[key]===undefined)continue;const val=String(b[key]).slice(0,250);
+      if(['primary','accent'].includes(key)&&!/^#[0-9a-fA-F]{6}$/.test(val))return json({error:'Cor hexadecimal inválida.'},400);
+      await env.DB.prepare('INSERT INTO app_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,val).run();
+    }return json({ok:true});
+  }
+  if(p==='/api/branding/photo'&&req.method==='POST'){
+    if(!requireAdmin(user))return json({error:'Acesso restrito.'},403);
+    const form=await req.formData(),file=form.get('file');if(!(file instanceof File)||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024)return json({error:'Envie JPG, PNG ou WebP de até 5 MB.'},400);
+    await env.FILES.put('branding/ocleiah-hero',file.stream(),{httpMetadata:{contentType:file.type}});return json({ok:true});
+  }
+  if(p==='/api/questionnaires'&&req.method==='POST'){
+    if(!requireAdmin(user))return json({error:'Acesso restrito.'},403);
+    const b=await req.json();const c=await env.DB.prepare('SELECT id FROM clients WHERE id=?').bind(Number(b.client_id)).first();if(!c)return json({error:'Cliente inválido.'},404);
+    const questions=[{id:'q1',text:'Qual é seu principal objetivo profissional nos próximos 12 meses?'},{id:'q2',text:'Quais competências e pontos fortes você reconhece em si?'},{id:'q3',text:'Quais situações no trabalho mais desafiam você?'},{id:'q4',text:'Como costuma reagir a conflitos ou feedbacks difíceis?'},{id:'q5',text:'Como você toma decisões sob pressão?'},{id:'q6',text:'O que gostaria de desenvolver em comunicação e liderança?'},{id:'q7',text:'Que ações já tentou e quais resultados obteve?'},{id:'q8',text:'Qual seria um primeiro passo realista para avançar?'}];
+    const token=randomId();await env.DB.prepare('INSERT INTO questionnaires(client_id,token,title,questions_json) VALUES(?,?,?,?)').bind(c.id,token,'Diagnóstico de desenvolvimento profissional',JSON.stringify(questions)).run();return json({ok:true,token,url:new URL('/?questionario='+token,req.url).toString()});
+  }
+  const qlist=p.match(/^\/api\/clients\/(\d+)\/questionnaires$/);
+  if(qlist&&req.method==='GET'){
+    if(!requireAdmin(user))return json({error:'Acesso restrito.'},403);
+    const rows=await env.DB.prepare('SELECT * FROM questionnaires WHERE client_id=? ORDER BY id DESC').bind(Number(qlist[1])).all();return json(rows.results);
+  }
+  const qreview=p.match(/^\/api\/questionnaires\/(\d+)\/(analyze|review)$/);
+  if(qreview&&req.method==='POST'){
+    if(!requireAdmin(user))return json({error:'Acesso restrito.'},403);
+    const q=await env.DB.prepare('SELECT * FROM questionnaires WHERE id=?').bind(Number(qreview[1])).first();if(!q||!q.answers_json)return json({error:'Questionário ainda não respondido.'},400);
+    const b=await req.json();
+    if(qreview[2]==='review'){
+      if(!['aprovado','revisao'].includes(b.status)||!String(b.review||'').trim())return json({error:'Informe parecer e situação.'},400);
+      await env.DB.prepare('UPDATE questionnaires SET review=?,status=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?').bind(String(b.review).slice(0,12000),b.status,q.id).run();
+      if(b.status==='aprovado')await env.DB.prepare('INSERT INTO assessments(client_id,title,category,summary) VALUES(?,?,?,?)').bind(q.client_id,'Devolutiva de desenvolvimento profissional','Questionário revisado',String(b.review).slice(0,12000)).run();
+      return json({ok:true});
+    }
+    if(!env.GEMINI_API_KEY)return json({error:'Configure o Secret GEMINI_API_KEY no Cloudflare para ativar a análise de IA.'},503);
+    const questions=JSON.parse(q.questions_json),answers=JSON.parse(q.answers_json);
+    const material=questions.map(x=>x.text+'\nResposta: '+String(answers[x.id]||'')).join('\n\n');
+    const prompt='Você auxilia uma mentora de desenvolvimento profissional. Resuma SOMENTE evidências das respostas, separe forças percebidas, desafios, perguntas para aprofundar e 3 ações práticas. Não diagnostique personalidade, saúde mental ou condições clínicas. Não invente fatos. Use linguagem cautelosa e termine com: Análise preliminar sujeita à revisão da especialista.\n\n'+material;
+    const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.25,maxOutputTokens:1400}})});
+    const data=await response.json();if(!response.ok)return json({error:'Falha ao consultar Gemini: '+String(data.error?.message||response.status).slice(0,200)},502);
+    const analysis=(data.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('\n');if(!analysis)return json({error:'A IA não retornou uma análise.'},502);
+    await env.DB.prepare("UPDATE questionnaires SET ai_analysis=?,status='analisado' WHERE id=?").bind(analysis,q.id).run();return json({ok:true,analysis});
+  }
   if (p === '/api/dashboard' && req.method === 'GET') {
     if (user.role === 'admin') {
       const [clients,leads,appt,plans] = await Promise.all([
