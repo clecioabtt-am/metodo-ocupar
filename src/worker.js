@@ -11,7 +11,7 @@ const randomId = () => crypto.randomUUID().replaceAll('-','');
 async function hashPassword(password, saltHex) {
   const salt = new Uint8Array(saltHex.match(/.{1,2}/g).map(x => parseInt(x,16)));
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt, iterations:210000, hash:'SHA-256' }, key, 256);
+  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt, iterations:100000, hash:'SHA-256' }, key, 256);
   return hex(new Uint8Array(bits));
 }
 
